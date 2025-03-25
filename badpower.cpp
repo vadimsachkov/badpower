@@ -15,7 +15,7 @@
 
     Project Properties → C/C++ → Language → C++ Language Standard → ISO C++17 (/std:c++17)
 
-    badpower.exe -ip 190.190.32.11 -mac 90-4E-2B-CA-0A-53 -max_min 120 -uptime_min 20  -pathlog "C:\\temp" -exec "shutdown /s /t 180 /c \"badpower script has initiated automatic shutdown because the Huawei router at 190.190.32.11 has not responded for a long time, possibly due to a power outage.\""
+    badpower.exe -ip 190.190.32.11 -mac 90-4E-2B-CA-0A-53 -wait_min 120 -uptime_min 20  -pathlog "C:\\temp" -exec "shutdown /s /t 180 /c \"badpower script has initiated automatic shutdown because the Huawei router at 190.190.32.11 has not responded for a long time, possibly due to a power outage.\""
 
     события в журнале логов системы:
     ID 1074 — обычное завершение работы   (например, через shutdown.exe) User32 . В описании есть текст который указан в параметре  /c команды shutdown
@@ -141,9 +141,9 @@ void showHelp() {
         << "\nRequired Parameters:\n"
         << "  -ip <ip_address>          Target device IP address (e.g. 192.168.1.100)\n"
         << "  -mac <mac_address>        Expected MAC address (e.g. AA-BB-CC-DD-EE-FF)\n"
-        << "  -max_min <minutes>        Max allowed minutes without ARP success\n"
+        << "  -wait_min <minutes>       Max allowed minutes without ARP success\n"
         << "  -uptime_min <minutes>     Min system uptime in minutes\n"
-        << "  -exec \"<command>\"         Command to execute when conditions are met\n"
+        << "  -exec \"<command>\"       Command to execute when conditions are met\n"
         << "  -pathlog <path>           Directory to store logs and badpower_last_success.txt\n"
         << "\nOptional:\n"
         << "  -? /? ?                   Show this help text\n";
@@ -176,9 +176,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int max_min = 0, uptime_min = 0;
-    if (!args.count("-max_min") || !parseInt(args["-max_min"], max_min)) {
-        cerr << "Invalid or missing -max_min parameter." << endl;
+    int wait_min = 0, uptime_min = 0;
+    if (!args.count("-wait_min") || !parseInt(args["-wait_min"], wait_min)) {
+        cerr << "Invalid or missing -wait_min parameter." << endl;
         return 1;
     }
     if (!args.count("-uptime_min") || !parseInt(args["-uptime_min"], uptime_min)) {
@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
 
     stringstream c1;
     c1 << "Time since last success (" << static_cast<int>(diff_minutes) << ") ";
-    c1 << (diff_minutes >= max_min ? ">= " : "< ") << "max_min (" << max_min << ")";
+    c1 << (diff_minutes >= wait_min ? ">= " : "< ") << "wait_min (" << wait_min << ")";
     logAndPrint(log_path, c1.str());
 
     stringstream c2;
@@ -252,7 +252,7 @@ int main(int argc, char* argv[]) {
     c2 << (uptime_min_now >= uptime_min ? ">= " : "< ") << "uptime_min (" << uptime_min << ")";
     logAndPrint(log_path, c2.str());
 
-    if (diff_minutes >= max_min && uptime_min_now >= uptime_min) {
+    if (diff_minutes >= wait_min && uptime_min_now >= uptime_min) {
         logAndPrint(log_path, "Conditions met. Executing command: " + exec_cmd);
         system(exec_cmd.c_str());
     }
