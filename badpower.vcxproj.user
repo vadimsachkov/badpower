@@ -4,4 +4,8 @@
     <LocalDebuggerCommandArguments>-ip 190.190.32.11 -mac 90-4E-2B-CA-0A-53 -max_min 120 -uptime_min 20  -pathlog "C:\\temp" -exec "notepad.exe"</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LocalDebuggerCommandArguments>-ip 190.190.32.11 -? -mac 90-4E-2B-CA-0A-53 -wait_min 120 -uptime_min 20  -prefix huaweiWS322 -clear -pathlog "C:\\temp" -exec </LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
 </Project>

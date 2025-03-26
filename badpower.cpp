@@ -15,16 +15,13 @@
 
     Project Properties → C/C++ → Language → C++ Language Standard → ISO C++17 (/std:c++17)
 
-    badpower.exe -ip 190.190.32.11 -mac 90-4E-2B-CA-0A-53 -wait_min 120 -uptime_min 20  -pathlog "C:\\temp" -exec "shutdown /s /t 180 /c \"badpower script has initiated automatic shutdown because the Huawei router at 190.190.32.11 has not responded for a long time, possibly due to a power outage.\""
-
+    badpower.exe -ip 190.190.32.11 -mac 90-4E-2B-CA-0A-53 -wait_min 120 -uptime_min 20  -prefix huaweiWS322 -clear -pathlog "C:\\temp" -exec "shutdown /s /t 180 /c \"badpower script has initiated automatic shutdown because the Huawei router at 190.190.32.11 has not responded for a long time, possibly due to a power outage.\""
     события в журнале логов системы:
     ID 1074 — обычное завершение работы   (например, через shutdown.exe) User32 . В описании есть текст который указан в параметре  /c команды shutdown
-    ID 1075 - отмена выключения командой shutdown -a 
-
+    ID 1075 - отмена выключения командой shutdown -a
 */
 
-
-// Version: 2.3
+// Version: 2.10
 
 #include <iostream>
 #include <string>
@@ -73,6 +70,15 @@ string toUpper(const string& s) {
     return out;
 }
 
+string sanitizeFilename(const string& input) {
+    string out = input;
+    out.erase(remove_if(out.begin(), out.end(), [](char c) {
+        return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' ||
+            c == '"' || c == '<' || c == '>' || c == '|';
+        }), out.end());
+    return out;
+}
+
 bool fileExists(const string& filename) {
     return fs::exists(filename);
 }
@@ -86,20 +92,21 @@ string getCurrentTimestamp() {
     return string(buffer);
 }
 
-string getCurrentLogFileName() {
+string getCurrentLogFileName(const string& prefixOrIp) {
     time_t now = time(0);
     tm local_tm;
     localtime_s(&local_tm, &now);
-    char buffer[32];
-    strftime(buffer, sizeof(buffer), "badpower_%Y%m.log", &local_tm);
+    char buffer[64];
+    strftime(buffer, sizeof(buffer), ("badpower_" + prefixOrIp + "_%Y%m.log").c_str(), &local_tm);
     return string(buffer);
 }
 
-void logAndPrint(const string& logPath, const string& message) {
+string g_logFilePath;
+
+void logAndPrint(const string& message) {
     string fullMessage = getCurrentTimestamp() + " - " + message;
     cout << fullMessage << endl;
-    string logFile = (fs::path(logPath) / getCurrentLogFileName()).string();
-    ofstream log(logFile, ios::app);
+    ofstream log(g_logFilePath, ios::app);
     log << fullMessage << endl;
 }
 
@@ -130,6 +137,7 @@ void deleteOldLogs(const string& directory, int maxAgeDays = 365) {
             auto sctp = chrono::time_point_cast<chrono::system_clock::duration>(ftime - decltype(ftime)::clock::now() + chrono::system_clock::now());
             auto age = chrono::duration_cast<chrono::hours>(now - sctp).count() / 24;
             if (age > maxAgeDays) {
+                logAndPrint("Old log file deleted: " + entry.path().string());
                 fs::remove(entry);
             }
         }
@@ -137,34 +145,44 @@ void deleteOldLogs(const string& directory, int maxAgeDays = 365) {
 }
 
 void showHelp() {
-    cout << "Usage: badpower [options]\n"
-        << "\nRequired Parameters:\n"
-        << "  -ip <ip_address>          Target device IP address (e.g. 192.168.1.100)\n"
-        << "  -mac <mac_address>        Expected MAC address (e.g. AA-BB-CC-DD-EE-FF)\n"
-        << "  -wait_min <minutes>       Max allowed minutes without ARP success\n"
-        << "  -uptime_min <minutes>     Min system uptime in minutes\n"
-        << "  -exec \"<command>\"       Command to execute when conditions are met\n"
-        << "  -pathlog <path>           Directory to store logs and badpower_last_success.txt\n"
-        << "\nOptional:\n"
-        << "  -? /? ?                   Show this help text\n";
+    cout << "This program monitors the availability of a target host using ARP.\n";
+    cout << "If the host becomes unreachable for a specified time,\n";
+    cout << "a user-defined action (e.g., shutdown) is executed.\n\n";
+    cout << "Usage: badpower [options]\n\n";
+    cout << "Required Parameters:\n";
+    cout << "  -ip <ip_address>          Target device IP address (e.g. 192.168.1.100)\n";
+    cout << "  -mac <mac_address>        Expected MAC address (e.g. AA-BB-CC-DD-EE-FF)\n";
+    cout << "  -wait_min <minutes>       Max allowed minutes without ARP success\n";
+    cout << "  -uptime_min <minutes>     Min system uptime in minutes\n";
+    cout << "  -exec \"<command>\"       Command to execute when conditions are met\n";
+    cout << "  -pathlog <path>           Directory to store logs and badpower_xxx.txt\n\n";
+    cout << "Optional:\n";
+    cout << "  -prefix <name>            Use this prefix instead of IP in filenames\n";
+    cout << "  -clear                    Clear timestamp file before executing\n";
+    cout << "  -?                       Show this help text\n";
 }
 
 int main(int argc, char* argv[]) {
-    map<string, string> args;
-    vector<string> flags(argv + 1, argv + argc);
-
-    if (flags.empty() || find(flags.begin(), flags.end(), "-?") != flags.end() ||
-        find(flags.begin(), flags.end(), "/?") != flags.end() ||
-        find(flags.begin(), flags.end(), "?") != flags.end()) {
+    if (argc == 1) {
         showHelp();
         return 0;
     }
 
+    map<string, string> args;
+    vector<string> flags(argv + 1, argv + argc);
+
+
     for (size_t i = 0; i < flags.size(); i++) {
-        if (flags[i].rfind("-", 0) == 0 && i + 1 < flags.size()) {
-            args[flags[i]] = flags[i + 1];
-            i++;
+        if (flags[i].rfind("-", 0) == 0) {
+            if (i + 1 < flags.size() && flags[i + 1].rfind("-", 0) != 0)
+                args[flags[i]] = flags[i + 1], i++;
+            else
+                args[flags[i]] = "";
         }
+    }
+    if (args.count("-?") ) {
+        showHelp();
+        return 0;
     }
 
     if (!args.count("-ip") || !isValidIP(args["-ip"])) {
@@ -175,38 +193,40 @@ int main(int argc, char* argv[]) {
         cerr << "Invalid or missing -mac parameter." << endl;
         return 1;
     }
-
-    int wait_min = 0, uptime_min = 0;
-    if (!args.count("-wait_min") || !parseInt(args["-wait_min"], wait_min)) {
-        cerr << "Invalid or missing -wait_min parameter." << endl;
+    if (!args.count("-wait_min")) {
+        cerr << "Missing -wait_min parameter." << endl;
         return 1;
     }
-    if (!args.count("-uptime_min") || !parseInt(args["-uptime_min"], uptime_min)) {
-        cerr << "Invalid or missing -uptime_min parameter." << endl;
+    if (!args.count("-uptime_min")) {
+        cerr << "Missing -uptime_min parameter." << endl;
         return 1;
     }
-    if (!args.count("-exec") || args["-exec"].empty()) {
+    if (!args.count("-exec")) {
         cerr << "Missing -exec command." << endl;
         return 1;
     }
-    if (!args.count("-pathlog") || args["-pathlog"].empty()) {
+    if (!args.count("-pathlog")) {
         cerr << "Missing -pathlog parameter." << endl;
         return 1;
     }
+
+    int wait_min = stoi(args["-wait_min"]);
+    int uptime_min = stoi(args["-uptime_min"]);
 
     string ip = args["-ip"];
     string mac = toUpper(args["-mac"]);
     string exec_cmd = args["-exec"];
     string log_path = args["-pathlog"];
-    string timestampFile = (fs::path(log_path) / "badpower_last_success.txt").string();
+    string prefix = args.count("-prefix") ? sanitizeFilename(args["-prefix"]) : regex_replace(ip, regex("\\."), "_");
+    string timestampFile = (fs::path(log_path) / ("badpower_" + prefix + ".txt")).string();
+    g_logFilePath = (fs::path(log_path) / getCurrentLogFileName(prefix)).string();
+    bool clearFlag = args.count("-clear") > 0;
 
     fs::create_directories(log_path);
     deleteOldLogs(log_path);
 
-    // Separator line for each run
-    logAndPrint(log_path, string(60, '-'));
-
-    logAndPrint(log_path, "Starting check for IP: " + ip + ", MAC: " + mac);
+    logAndPrint(string(60, '-'));
+    logAndPrint("Starting check for IP: " + ip + ", MAC: " + mac);
 
     runCommand("arp -d " + ip);
     runCommand("ping -n 1 " + ip);
@@ -216,12 +236,12 @@ int main(int argc, char* argv[]) {
         ofstream out(timestampFile);
         out << getCurrentTimestamp();
         out.close();
-        logAndPrint(log_path, "MAC address found. Timestamp updated.");
+        logAndPrint("MAC address found. Timestamp updated in file: " + timestampFile);
         return 0;
     }
 
     if (!fileExists(timestampFile)) {
-        logAndPrint(log_path, "MAC not found. No timestamp file. Exiting.");
+        logAndPrint("MAC not found. No timestamp file: " + timestampFile + ". Exiting.");
         return 0;
     }
 
@@ -230,34 +250,23 @@ int main(int argc, char* argv[]) {
     getline(in, lastTimestamp);
     in.close();
 
-    logAndPrint(log_path, "Last success timestamp read: " + lastTimestamp);
-
     time_t last = parseTimestamp(lastTimestamp);
     time_t now = time(0);
     double diff_minutes = difftime(now, last) / 60.0;
-    ULONGLONG uptime_ms = GetTickCount64();
-    ULONGLONG uptime_min_now = uptime_ms / (60 * 1000);
+    ULONGLONG uptime_min_now = GetTickCount64() / (60 * 1000);
 
-    stringstream ss;
-    ss << "MAC not found. Time since last success: " << diff_minutes << " min, Uptime: " << uptime_min_now << " min.";
-    logAndPrint(log_path, ss.str());
-
-    stringstream c1;
-    c1 << "Time since last success (" << static_cast<int>(diff_minutes) << ") ";
-    c1 << (diff_minutes >= wait_min ? ">= " : "< ") << "wait_min (" << wait_min << ")";
-    logAndPrint(log_path, c1.str());
-
-    stringstream c2;
-    c2 << "System uptime (" << uptime_min_now << ") ";
-    c2 << (uptime_min_now >= uptime_min ? ">= " : "< ") << "uptime_min (" << uptime_min << ")";
-    logAndPrint(log_path, c2.str());
+    logAndPrint("MAC not found. Time since last success: " + to_string(diff_minutes) + " min, Uptime: " + to_string(uptime_min_now) + " min.");
 
     if (diff_minutes >= wait_min && uptime_min_now >= uptime_min) {
-        logAndPrint(log_path, "Conditions met. Executing command: " + exec_cmd);
+        logAndPrint("Conditions met. Executing command: " + exec_cmd);
+        if (clearFlag && fileExists(timestampFile)) {
+            fs::remove(timestampFile);
+            logAndPrint("Timestamp file deleted due to -clear: " + timestampFile);
+        }
         system(exec_cmd.c_str());
     }
     else {
-        logAndPrint(log_path, "Conditions NOT met. No action taken.");
+        logAndPrint("Conditions NOT met. No action taken.");
     }
 
     return 0;
