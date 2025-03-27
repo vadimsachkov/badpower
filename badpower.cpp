@@ -21,7 +21,7 @@
     ID 1075 - отмена выключения командой shutdown -a
 */
 
-// Version: 2.11
+// Version: 2.12
 
 #include <iostream>
 #include <string>
@@ -146,7 +146,7 @@ void deleteOldLogs(const string& directory, int maxAgeDays = 365) {
 }
 
 void showHelp() {
-    cout << "This program badpower.exe v2.11 monitors the availability of a target host using ARP.\n";
+    cout << "This program badpower.exe v2.12 monitors the availability of a target host using ARP.\n";
     cout << "If the host becomes unreachable for a specified time, a user-defined action (e.g., shutdown) is executed.\n";
     cout << "The program creates two auxiliary files: a log file and a timestamp file in the directory specified by -pathlog.\n";
     cout << "Log files are created monthly and are automatically deleted after one year.\n\n";
