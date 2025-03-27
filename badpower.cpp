@@ -21,7 +21,7 @@
     ID 1075 - отмена выключения командой shutdown -a
 */
 
-// Version: 2.10
+// Version: 2.11
 
 #include <iostream>
 #include <string>
@@ -34,6 +34,7 @@
 #include <ctime>
 #include <iomanip>
 #include <chrono>
+#include <set>
 #include <filesystem> // Requires C++17
 
 namespace fs = std::filesystem;
@@ -145,25 +146,34 @@ void deleteOldLogs(const string& directory, int maxAgeDays = 365) {
 }
 
 void showHelp() {
-    cout << "This program monitors the availability of a target host using ARP.\n";
-    cout << "If the host becomes unreachable for a specified time,\n";
-    cout << "a user-defined action (e.g., shutdown) is executed.\n\n";
-    cout << "Usage: badpower [options]\n\n";
+    cout << "This program badpower.exe v2.11 monitors the availability of a target host using ARP.\n";
+    cout << "If the host becomes unreachable for a specified time, a user-defined action (e.g., shutdown) is executed.\n";
+    cout << "The program creates two auxiliary files: a log file and a timestamp file in the directory specified by -pathlog.\n";
+    cout << "Log files are created monthly and are automatically deleted after one year.\n\n";
+    cout << "Usage: badpower [parameters]\n\n";
     cout << "Required Parameters:\n";
     cout << "  -ip <ip_address>          Target device IP address (e.g. 192.168.1.100)\n";
-    cout << "  -mac <mac_address>        Expected MAC address (e.g. AA-BB-CC-DD-EE-FF)\n";
-    cout << "  -wait_min <minutes>       Max allowed minutes without ARP success\n";
-    cout << "  -uptime_min <minutes>     Min system uptime in minutes\n";
-    cout << "  -exec \"<command>\"       Command to execute when conditions are met\n";
-    cout << "  -pathlog <path>           Directory to store logs and badpower_xxx.txt\n\n";
-    cout << "Optional:\n";
-    cout << "  -prefix <name>            Use this prefix instead of IP in filenames\n";
+    cout << "  -mac <mac_address>        Expected MAC address of the target device (e.g. AA-BB-CC-DD-EE-FF)\n";
+    cout << "  -wait_min <minutes>       Maximum allowed time without ARP success (in minutes)\n";
+    cout << "  -uptime_min <minutes>     Required system uptime before action (in minutes)\n";
+    cout << "  -exec \"<command>\"         Command to execute when conditions are met\n";
+    cout << "  -pathlog <path>           Directory to store logs and timestamp files\n\n";
+    cout << "Optional Parameters:\n";
+    cout << "  -prefix <name>            Prefix used instead of IP in filenames under -pathlog (log and timestamp files)\n";
     cout << "  -clear                    Clear timestamp file before executing\n";
-    cout << "  -?                       Show this help text\n";
+    cout << "  -?                        Show this help text\n";
 }
 
 int main(int argc, char* argv[]) {
-    if (argc == 1) {
+	
+	
+	set<string> allowedParams = {
+		"-ip", "-mac", "-wait_min", "-uptime_min",
+		"-exec", "-pathlog", "-prefix", "-clear", "-?", "/?", "?"
+	};
+ 
+
+	if (argc == 1) {
         showHelp();
         return 0;
     }
@@ -226,6 +236,15 @@ int main(int argc, char* argv[]) {
     deleteOldLogs(log_path);
 
     logAndPrint(string(60, '-'));
+    
+    // Check for any unknown parameters and log a warning.
+    for (const auto& [key, _] : args) {
+        if (!allowedParams.count(key)) {
+            logAndPrint("Warning: Unknown parameter ignored: " + key);
+        }
+    }
+
+
     logAndPrint("Starting check for IP: " + ip + ", MAC: " + mac);
 
     runCommand("arp -d " + ip);
