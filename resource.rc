@@ -14,8 +14,8 @@ LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,12,0,0
- PRODUCTVERSION 2,12,0,0
+ FILEVERSION 2,13,0,0
+ PRODUCTVERSION 2,13,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -32,12 +32,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Vadim Sachkov"
             VALUE "FileDescription", "Automatic action if a network device is unavailable for a prolonged time"
-            VALUE "FileVersion", "2.12.0.0"
+            VALUE "FileVersion", "2.13.0.0"
             VALUE "InternalName", "badpower"
             VALUE "LegalCopyright", "2025 Vadim Sachkov"
             VALUE "OriginalFilename", "badpower.exe"
             VALUE "ProductName", "badpower"
-            VALUE "ProductVersion", "2.12.0.0"
+            VALUE "ProductVersion", "2.13.0.0"
         END
     END
     BLOCK "VarFileInfo"
