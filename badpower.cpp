@@ -130,20 +130,45 @@ time_t parseTimestamp(const string& timestamp) {
     return mktime(&t);
 }
 
+// Удаляет лог-файлы badpower_, если они старше указанного количества дней.
+// Дата определяется из имени файла в формате YYYYMM (например: badpower_<ip>_202401.log).
 void deleteOldLogs(const string& directory, int maxAgeDays = 365) {
-    auto now = chrono::system_clock::now();
+    using namespace std::chrono;
+    auto now = system_clock::now();
+
     for (const auto& entry : fs::directory_iterator(directory)) {
-        if (fs::is_regular_file(entry) && entry.path().filename().string().rfind("badpower_", 0) == 0) {
-            auto ftime = fs::last_write_time(entry);
-            auto sctp = chrono::time_point_cast<chrono::system_clock::duration>(ftime - decltype(ftime)::clock::now() + chrono::system_clock::now());
-            auto age = chrono::duration_cast<chrono::hours>(now - sctp).count() / 24;
-            if (age > maxAgeDays) {
+        if (!fs::is_regular_file(entry))
+            continue;
+
+        string filename = entry.path().filename().string();
+        if (filename.rfind("badpower_", 0) != 0)
+            continue;
+
+        // Извлекаем YYYYMM из имени
+        smatch match;
+        if (regex_search(filename, match, regex(R"(_(\d{6})\.log$)"))) {
+            string yyyymm = match[1];
+
+            // Парсим в дату: YYYY-MM-01
+            int year = stoi(yyyymm.substr(0, 4));
+            int month = stoi(yyyymm.substr(4, 2));
+            tm file_tm = {};
+            file_tm.tm_year = year - 1900;
+            file_tm.tm_mon = month - 1;
+            file_tm.tm_mday = 1;
+            time_t file_time = mktime(&file_tm);
+            auto file_date = system_clock::from_time_t(file_time);
+
+            auto ageDays = duration_cast<duration<int, std::ratio<86400>>>(now - file_date).count();
+
+            if (ageDays > maxAgeDays) {
                 logAndPrint("Old log file deleted: " + entry.path().string());
                 fs::remove(entry);
             }
         }
     }
 }
+
 
 void showHelp() {
     cout << "This program badpower.exe v2.12 monitors the availability of a target host using ARP.\n";
@@ -233,10 +258,11 @@ int main(int argc, char* argv[]) {
     bool clearFlag = args.count("-clear") > 0;
 
     fs::create_directories(log_path);
-    deleteOldLogs(log_path);
 
     logAndPrint(string(60, '-'));
     
+    deleteOldLogs(log_path);
+
     // Check for any unknown parameters and log a warning.
     for (const auto& [key, _] : args) {
         if (!allowedParams.count(key)) {
